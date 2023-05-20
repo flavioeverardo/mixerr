@@ -1,5 +1,4 @@
 from prettytable import PrettyTable
-from colour import Color
 from . import distance
 from . import util
 import numpy as np

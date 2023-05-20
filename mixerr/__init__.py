@@ -101,10 +101,12 @@ def main():
     print("Project:", audio_project)
     
     len_track = 0
+    sample_rate = 44100
     for audio in audio_files:
         print("Reading audio file:", audio)
         track_names[track_id] = audio
         sr, x = scipy.io.wavfile.read(os.path.join(project, audio))
+        sample_rate = sr
         tracks[track_id] = x
         len_track = len(x)
         #print("Length of tracks in samples:", len_track)
@@ -409,31 +411,78 @@ def main():
         ## Normalize the output?
         write(filename, 44100, mix.astype(np.int16))
 
-        spectre = np.fft.fft(mix)
-        freq = np.fft.fftfreq(mix.size, 1/44100)
-        mask=freq>0
-
-        frequencies, times, spectrogram = signal.spectrogram(mix, 44100)
-
         if display:
             print("Generating plots")
-        ## Plot
+
+        ## Do the extra calculation for the plots
+        
+        # Normalize the audio data to have values between -1 and 1
+        audio_data = mix / np.max(np.abs(mix))
+
+        ## Compute the time values corresponding to each sample
+        time = np.arange(0, len(audio_data)) / sample_rate
+
+        ## Compute the periodogram and the sub bands division
+        # Compute the periodogram using a Hamming window
+        frequencies, power_spectrum = signal.periodogram(audio_data, sample_rate, window='hamming')
+
+        # Convert to dBFS
+        power_spectrum_dbfs = 20 * np.log10(power_spectrum / np.max(power_spectrum))
+
+        # Extract frequencies and power spectrum within the desired range
+        start_freq = 10
+        end_freq = 22000
+        frequency_range = np.logical_and(frequencies >= start_freq, frequencies <= end_freq)
+        frequencies_filtered = frequencies[frequency_range]
+        power_spectrum_dbfs_filtered = power_spectrum_dbfs[frequency_range]
+
+        # Divide the frequency spectrum into sub-bands
+        sub_bands = [[10, 20], [20, 30], [30, 40], [40, 50], [50, 60], [60, 70], [70, 80], [80, 90], [90, 100],
+                     [100, 200], [200, 300], [300, 400], [400, 500], [500, 600], [600, 700], [700, 800], [800, 900], [900, 1000],
+                     [1000, 2000], [2000, 3000], [3000, 4000], [4000, 5000], [5000, 6000], [6000, 7000], [7000, 8000], [8000, 9000], [9000, 10000],
+                     [10000, 20000], [20000, 22000]
+                     ]
+
+        # Initialize arrays to store sub-band data
+        sub_band_frequencies = []
+        sub_band_power_spectrum = []
+
+        # Extract frequencies and power spectrum for each sub-band
+        for sub_band in sub_bands:
+            start_freq, end_freq = sub_band
+            sub_band_indices = np.logical_and(frequencies_filtered >= start_freq, frequencies_filtered <= end_freq)
+            sub_band_frequencies.append(frequencies_filtered[sub_band_indices])
+            sub_band_power_spectrum.append(power_spectrum_dbfs_filtered[sub_band_indices])
+
+        power_averager = []
+        center_frequency = []
+        # Plot each sub-band
+        for i, sub_band in enumerate(sub_bands):
+            center_frequency.append((sub_band[0] + sub_band[1]) / 2)
+            frequencies = sub_band_frequencies[i]
+            power_spectrum = sub_band_power_spectrum[i]
+            power_averager.append(np.max(power_spectrum))
+
+        # Plot the time-domain waveform
         plt.figure(figsize=(12,7))
         plt.subplot(211)
         plt.grid(True)
-        plt.plot(mix)
-        plt.title("Time domain")
+        plt.plot(time, audio_data)
         plt.xlabel('Time (s)')
-        plt.ylabel('Linear Amp [0-1]')
+        plt.ylabel('Amplitude')
+        plt.title('Normalized Time-Domain Waveform of Audio File')
+        plt.ylim([-1, 1])  # set y-axis limits
 
+        # Plot the frequency domain
         plt.subplot(212)
-        plt.grid(True)
-        plt.plot(freq[mask],np.abs(spectre[mask]))
-        plt.title(" Spectrum")
-        plt.xlabel('Frequency')
-        plt.xlim(xmin=20)
-        plt.ylabel('Linear Amp [0-1]')
+        plt.plot(center_frequency, power_averager)
         plt.xscale('log')
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Power (dBFS)')
+        plt.title('Normalized Periodogram')
+        plt.ylim([-100, 0])  # set y-axis limits
+        plt.xlim([20, 20000])  # set x-axis limits
+        plt.grid(True)
 
         plt.tight_layout()
 
