@@ -309,70 +309,59 @@ def main():
                         if display:
                             print("cell:", cell, "answer:", answer_set)
         
-    ## 10) Perform tracks normalization and mono output processing
+    ## 10) Perform tracks normalization and stereo to mono conversion.
+    ## Then match all arrays in size if needed by filling with zeros
     print("Normalizing tracks...") 
-    #for tid, track in tracks.items():
-    #    #num_channels = len(track[0])
-    #    print("Processing track:", tid)#, "num channels", num_channels)
-    #    num_samples = len(track)
+    for tid, track in tracks.items():
+        # Check the shape of the audio data array
+        num_channels = 1
 
-        ## Mono
-        #if num_channels == 1:
+        if display:
+            print("Processing track:", tid, " num channels", num_channels)
 
-    #    peak = np.max(np.abs(track))
-    #    track = np.array([track / peak * 32767], np.int16)
+        if track.ndim == 2 and track.shape[1] == 2:
+            num_channels = 2
 
-    #    print(np.shape(track), np.shape(tracks[tid]))
-    #    tracks[tid] = track[0]
+            left_channel  = track[:, 0]
+            right_channel = track[:, 1]
             
-            #max_left  = 0
-            #for i in range(num_samples):
-            #    amp = 
-            #    if abs(amp) > max_left:
-            #        max_left = abs(amp)
+            # Combine channels and divide by square root of 2
+            track = (left_channel + right_channel) / np.sqrt(2)
 
-            #for i in range(num_samples):
-            #    track[:, 0][i] /= max_left
+        ## Store back the track in the dictionary
+        tracks[tid] = (track / np.max(np.abs(track))) * 32767
 
-        ## Stereo
-        #elif num_channels == 2:
+        ## Multichannel formats... not supported for now
+        if num_channels > 2:
+            print("Number of channels not supported")
 
-        #    peakl = np.max(np.abs(track[:, 0]))
-        #    peakr = np.max(np.abs(track[:, 1]))
-        #    peak = max(peakl, peakr)
-        #    track[:, 0] = np.array([track[:, 0] / peak * 32767], np.int16)
-        #    track[:, 1] = np.array([track[:, 1] / peak * 32767], np.int16)
+    # Find the maximum size among the arrays
+    max_size = max([f.size for f in tracks.values()])
+    if display:
+        print("Max size", max_size)
+    
+    # Create new arrays of the maximum size, filled with zeros
+    for key, track in tracks.items():
+        if track.size < max_size:
+            matched = np.zeros(max_size)
+            # Copy the values from the original arrays to the matched arrays
+            matched[:track.size] = track
+            # Now all arrays have the same size, filled with zeros if necessary
+            tracks[key] = matched
 
-            #track = track[:, 0] + track[:, 1]
-            
-            #max_left  = 0
-            #max_right = 0
-            #for i in range(num_samples):
-            #    ampl = track[:, 0][i]
-            #    ampr = track[:, 1][i]
-            #    if abs(ampl) > max_left:
-            #        max_left  = abs(ampl)
-            #    if abs(ampr) > max_right:
-            #        max_right = abs(ampr)
-
-            #for i in range(num_samples):
-            #    track[:, 0][i] /= max_left
-            #    track[:, 1][i] /= max_right
-
-        ## Immersive formats... not supported for now
-        #else:
-        #    print("Number of channels not supported")
 
     ## 11 Generate mixes, plans and plots
+    print("Generating mixes, plans and plots...")
     track_id  = 0
     track_db  = 1
     model = 1
     for answer in answer_sets:
-        print("Parsing answer %s to wav, plan and plots"%model)
+        if display:
+            print("Parsing answer %s to wav, plan and plots"%model)
         
         if display:
             print("Answer:", model)
-        mix = np.zeros(len_track)
+        mix = np.zeros(max_size)
         total_gain = 0
 
         if display:
